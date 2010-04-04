@@ -143,13 +143,13 @@ extract_message_rfc822 (const gchar             *uri,
     }
 
     subject = g_mime_message_get_subject (message);
-    if (subject && g_utf8_validate (subject, -1, NULL)) {
+    if (subject) {
         tracker_sparql_builder_predicate (metadata, "nmo:messageSubject");
         tracker_sparql_builder_object_string (metadata, subject);
     }
 
     message_id = g_mime_message_get_message_id (message);
-    if (message_id && g_utf8_validate (message_id, -1, NULL)) {
+    if (message_id) {
         tracker_sparql_builder_predicate (metadata, "nmo:messageId");
         tracker_sparql_builder_object_string (metadata, message_id);
     }
