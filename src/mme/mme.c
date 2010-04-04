@@ -28,7 +28,20 @@
  * OF SUCH DAMAGE.
  **/
 
+#include <gmime/gmime.h>
 #include <libtracker-extract/tracker-extract.h>
+
+
+static GMimeParser *
+_mime_parser_for_uri (const gchar   *uri)
+{
+    GFile *file;
+    GMimeStream *stream;
+
+    file = g_file_new_for_uri (uri);
+    stream = g_mime_stream_gio_new (file);
+    return g_mime_parser_new_with_stream (stream);
+}
 
 
 static void
@@ -36,8 +49,36 @@ extract_message_rfc822 (const gchar             *uri,
                         TrackerSparqlBuilder    *preupdate,
                         TrackerSparqlBuilder    *metadata)
 {
+    GMimeParser *parser;
+    GMimeMessage *message;
+    const gchar *subject, *message_id;
+
+    g_type_init ();
+    g_mime_init (GMIME_ENABLE_RFC2047_WORKAROUNDS);
+
+    parser = _mime_parser_for_uri (uri);
+
+    message = g_mime_parser_construct_message (parser);
+    if (! message)
+        goto out;
+
     tracker_sparql_builder_predicate (metadata, "a");
     tracker_sparql_builder_object (metadata, "nmo:Message");
+
+    subject = g_mime_message_get_subject (message);
+    if (subject && g_utf8_validate (subject, -1, NULL)) {
+        tracker_sparql_builder_predicate (metadata, "nmo:messageSubject");
+        tracker_sparql_builder_object_string (metadata, subject);
+    }
+
+    message_id = g_mime_message_get_message_id (message);
+    if (message_id && g_utf8_validate (message_id, -1, NULL)) {
+        tracker_sparql_builder_predicate (metadata, "nmo:messageId");
+        tracker_sparql_builder_object_string (metadata, message_id);
+    }
+
+out:
+    g_mime_shutdown ();
 }
 
 
