@@ -22,5 +22,5 @@ tags
 /configure
 /libtool
 /m4/
-/src/mme/libextract-mime-message.la
+/src/tracker-extract/libextract-mime-message.la
 
