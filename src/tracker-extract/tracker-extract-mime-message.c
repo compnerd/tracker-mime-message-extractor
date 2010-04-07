@@ -205,6 +205,47 @@ extract_message_rfc822 (const gchar             *uri,
         g_object_unref (ial);
     }
 
+    header = g_mime_message_get_reply_to (message);
+    if (header) {
+        gchar *fullname = NULL, *email_address = NULL, *email_uri = NULL;
+
+        _parse_address (header, &fullname, &email_address);
+
+        if (email_address) {
+            email_uri = tracker_uri_printf_escaped ("mailto:%s", email_address);
+
+            tracker_sparql_builder_subject_iri (metadata, email_uri);
+            tracker_sparql_builder_predicate (metadata, "rdf:type");
+            tracker_sparql_builder_object (metadata, "nco:EmailAddress");
+
+            tracker_sparql_builder_subject_iri (metadata, email_uri);
+            tracker_sparql_builder_predicate (metadata, "nco:emailAddress");
+            tracker_sparql_builder_object_string (metadata, email_address);
+
+            g_free (email_address);
+        }
+
+        tracker_sparql_builder_predicate (metadata, "nmo:replyTo");
+
+        tracker_sparql_builder_object_blank_open (metadata);
+        tracker_sparql_builder_predicate (metadata, "rdf:type");
+        tracker_sparql_builder_object (metadata, "nco:Contact");
+
+        if (fullname) {
+            tracker_sparql_builder_predicate (metadata, "nco:fullname");
+            tracker_sparql_builder_object_string (metadata, fullname);
+            g_free (fullname);
+        }
+
+        if (email_uri) {
+            tracker_sparql_builder_predicate (metadata, "nco:hasEmailAddress");
+            tracker_sparql_builder_object_iri (metadata, email_uri);
+            g_free (email_uri);
+        }
+
+        tracker_sparql_builder_object_blank_close (metadata);
+    }
+
     ial = g_mime_message_get_recipients (message, GMIME_RECIPIENT_TYPE_CC);
     if (ial) {
         unsigned int i;
