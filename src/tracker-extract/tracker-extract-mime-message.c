@@ -89,6 +89,7 @@ extract_message_rfc822 (const gchar             *uri,
     GMimeMessage *message;
     InternetAddressList *ial;
     const gchar *header, *subject, *message_id;
+    gchar *date;
 
     g_type_init ();
     g_mime_init (GMIME_ENABLE_RFC2047_WORKAROUNDS);
@@ -294,6 +295,20 @@ extract_message_rfc822 (const gchar             *uri,
         }
 
         g_object_unref (ial);
+    }
+
+    date = g_mime_message_get_date_as_string (message);
+    if (date) {
+        gchar *parsed;
+
+        parsed = tracker_date_guess (date);
+        if (parsed) {
+            tracker_sparql_builder_predicate (metadata, "nmo:sentDate");
+            tracker_sparql_builder_object_string (metadata, parsed);
+            g_free (parsed);
+        }
+
+        g_free (date);
     }
 
 out:
