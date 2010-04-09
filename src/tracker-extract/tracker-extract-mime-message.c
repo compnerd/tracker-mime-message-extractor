@@ -139,7 +139,8 @@ extract_message_rfc822 (const gchar             *uri,
     }
 
     if (ial = g_mime_message_get_recipients (message, GMIME_RECIPIENT_TYPE_TO)) {
-        _mark_addresses_as (preupdate, metadata, ial, "nmo:primaryRecipient");
+        /* tracker does not have nmo:primaryRecipient */
+        _mark_addresses_as (preupdate, metadata, ial, "nmo:to");
         g_object_unref (ial);
     }
 
@@ -152,7 +153,13 @@ extract_message_rfc822 (const gchar             *uri,
     }
 
     if (ial = g_mime_message_get_recipients (message, GMIME_RECIPIENT_TYPE_CC)) {
-        _mark_addresses_as (preupdate, metadata, ial, "nmo:secondaryRecipient");
+        /* tracker does not have nmo:secondaryRecipient */
+        _mark_addresses_as (preupdate, metadata, ial, "nmo:cc");
+        g_object_unref (ial);
+    }
+
+    if (ial = g_mime_message_get_recipients (message, GMIME_RECIPIENT_TYPE_BCC)) {
+        _mark_addresses_as (preupdate, metadata, ial, "nmo:bcc");
         g_object_unref (ial);
     }
 
