@@ -105,8 +105,9 @@ extract_message_rfc822 (const gchar             *uri,
     GMimeParser *parser;
     GMimeMessage *message;
     InternetAddressList *ial;
-    const gchar *header, *subject, *message_id;
-    gchar *date;
+    GMimeHeaderList *headers;
+    const gchar *string;
+    gchar *buffer;
 
     g_type_init ();
     g_mime_init (GMIME_ENABLE_RFC2047_WORKAROUNDS);
@@ -120,22 +121,22 @@ extract_message_rfc822 (const gchar             *uri,
     tracker_sparql_builder_predicate (metadata, "a");
     tracker_sparql_builder_object (metadata, "nmo:Message");
 
-    if (header = g_mime_object_get_header (GMIME_OBJECT (message), "From")) {
-        if (ial = internet_address_list_parse_string (header)) {
+    if (string = g_mime_object_get_header (GMIME_OBJECT (message), "From")) {
+        if (ial = internet_address_list_parse_string (string)) {
             if (internet_address_list_length (ial) == 1)
                 _mark_addresses_as (preupdate, metadata, ial, "nmo:from");
             g_object_unref (ial);
         }
     }
 
-    if (message_id = g_mime_message_get_message_id (message)) {
+    if (string = g_mime_message_get_message_id (message)) {
         tracker_sparql_builder_predicate (metadata, "nmo:messageId");
-        tracker_sparql_builder_object_string (metadata, message_id);
+        tracker_sparql_builder_object_string (metadata, string);
     }
 
-    if (subject = g_mime_message_get_subject (message)) {
+    if (string = g_mime_message_get_subject (message)) {
         tracker_sparql_builder_predicate (metadata, "nmo:messageSubject");
-        tracker_sparql_builder_object_string (metadata, subject);
+        tracker_sparql_builder_object_string (metadata, string);
     }
 
     if (ial = g_mime_message_get_recipients (message, GMIME_RECIPIENT_TYPE_TO)) {
@@ -144,8 +145,8 @@ extract_message_rfc822 (const gchar             *uri,
         g_object_unref (ial);
     }
 
-    if (header = g_mime_message_get_reply_to (message)) {
-        if (ial = internet_address_list_parse_string (header)) {
+    if (string = g_mime_message_get_reply_to (message)) {
+        if (ial = internet_address_list_parse_string (string)) {
             if (internet_address_list_length (ial) == 1)
                 _mark_addresses_as (preupdate, metadata, ial, "nmo:replyTo");
             g_object_unref (ial);
@@ -163,14 +164,14 @@ extract_message_rfc822 (const gchar             *uri,
         g_object_unref (ial);
     }
 
-    if (date = g_mime_message_get_date_as_string (message)) {
+    if (buffer = g_mime_message_get_date_as_string (message)) {
         gchar *sent_date;
-        if (sent_date = tracker_date_guess (date)) {
+        if (sent_date = tracker_date_guess (buffer)) {
             tracker_sparql_builder_predicate (metadata, "nmo:sentDate");
             tracker_sparql_builder_object_string (metadata, sent_date);
             g_free (sent_date);
         }
-        g_free (date);
+        g_free (buffer);
     }
 
 out:
