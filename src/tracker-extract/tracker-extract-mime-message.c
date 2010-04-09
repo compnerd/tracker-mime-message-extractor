@@ -162,6 +162,23 @@ extract_message_rfc822 (const gchar             *uri,
         g_object_unref (ial);
     }
 
+    if (string = g_mime_object_get_header (GMIME_OBJECT (message), "References")) {
+        GMimeReferences *reference, *references;
+
+        references = g_mime_references_decode (string);
+        for (reference = references; reference; reference = reference->next) {
+            tracker_sparql_builder_predicate (metadata, "nmo:references");
+            tracker_sparql_builder_object_blank_open (metadata);
+                tracker_sparql_builder_predicate (metadata, "a");
+                tracker_sparql_builder_object (metadata, "nmo:Message");
+
+                tracker_sparql_builder_predicate (metadata, "nmo:messageId");
+                tracker_sparql_builder_object_string (metadata, reference->msgid);
+            tracker_sparql_builder_object_blank_close (metadata);
+        }
+        g_mime_references_clear (&references);
+    }
+
     if (string = g_mime_message_get_reply_to (message)) {
         if (ial = internet_address_list_parse_string (string)) {
             if (internet_address_list_length (ial) == 1)
