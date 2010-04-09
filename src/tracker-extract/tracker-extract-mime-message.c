@@ -47,37 +47,54 @@ _mime_parser_for_uri (const gchar   *uri)
 }
 
 static void
-_parse_address (const gchar *address,
-                gchar       **fullname,
-                gchar       **email_address)
+_mark_addresses_as (TrackerSparqlBuilder    *preupdate,
+                    TrackerSparqlBuilder    *metadata,
+                    InternetAddressList     *ial,
+                    const gchar * const      predicate)
 {
-    InternetAddress *ia;
-    InternetAddressList *ial;
+    unsigned int i;
 
-    g_return_if_fail (fullname);
-    g_return_if_fail (email_address);
+    for (i = 0; i < internet_address_list_length (ial); i++) {
+        InternetAddress *ia = internet_address_list_get_address (ial, i);
+        const gchar *fullname = NULL, *email_address = NULL;
+        gchar *email_uri = NULL;
 
-    *fullname = *email_address = NULL;
+        fullname = internet_address_get_name (ia);
 
-    ial = internet_address_list_parse_string (address);
-    if (! ial)
-        return;
+        if (INTERNET_ADDRESS_IS_MAILBOX (ia)) {
+            email_address = internet_address_mailbox_get_addr (INTERNET_ADDRESS_MAILBOX (ia));
+        }
 
-    /* the address contains more than a single entity */
-    if (internet_address_list_length (ial) != 1) {
-        g_object_unref (ial);
-        return;
+        if (email_address) {
+            email_uri = tracker_uri_printf_escaped ("mailto:%s", email_address);
+
+            tracker_sparql_builder_insert_open (preupdate, NULL);
+                tracker_sparql_builder_subject_iri (preupdate, email_uri);
+                tracker_sparql_builder_predicate (preupdate, "rdf:type");
+                tracker_sparql_builder_object (preupdate, "nco:EmailAddress");
+
+                tracker_sparql_builder_subject_iri (preupdate, email_uri);
+                tracker_sparql_builder_predicate (preupdate, "nco:emailAddress");
+                tracker_sparql_builder_object_string (preupdate, email_address);
+            tracker_sparql_builder_insert_close(preupdate);
+
+            tracker_sparql_builder_predicate (metadata, predicate);
+            tracker_sparql_builder_object_blank_open (metadata);
+                tracker_sparql_builder_predicate (metadata, "a");
+                tracker_sparql_builder_object (metadata, "nco:Contact");
+
+                if (fullname) {
+                    tracker_sparql_builder_predicate (metadata, "nco:fullname");
+                    tracker_sparql_builder_object_string (metadata, fullname);
+                }
+
+                tracker_sparql_builder_predicate (metadata, "nco:hasEmailAddress");
+                tracker_sparql_builder_object_iri (metadata, email_uri);
+            tracker_sparql_builder_object_blank_close (metadata);
+
+            g_free (email_uri);
+        }
     }
-
-    ia = internet_address_list_get_address (ial, 0);
-
-    *fullname = g_strdup (internet_address_get_name (ia));
-
-    if (INTERNET_ADDRESS_IS_MAILBOX (ia)) {
-        *email_address = g_strdup (internet_address_mailbox_get_addr (INTERNET_ADDRESS_MAILBOX (ia)));
-    }
-
-    g_object_unref (ial);
 }
 
 static void
@@ -103,45 +120,12 @@ extract_message_rfc822 (const gchar             *uri,
     tracker_sparql_builder_predicate (metadata, "a");
     tracker_sparql_builder_object (metadata, "nmo:Message");
 
-    header = g_mime_object_get_header (GMIME_OBJECT (message), "From");
-    if (header) {
-        gchar *fullname = NULL, *email_address = NULL, *email_uri = NULL;
-
-        _parse_address (header, &fullname, &email_address);
-
-        if (email_address) {
-            email_uri = tracker_uri_printf_escaped ("mailto:%s", email_address);
-
-            tracker_sparql_builder_subject_iri (metadata, email_uri);
-            tracker_sparql_builder_predicate (metadata, "rdf:type");
-            tracker_sparql_builder_object (metadata, "nco:EmailAddress");
-
-            tracker_sparql_builder_subject_iri (metadata, email_uri);
-            tracker_sparql_builder_predicate (metadata, "nco:emailAddress");
-            tracker_sparql_builder_object_string (metadata, email_address);
-
-            g_free (email_address);
+    if (header = g_mime_object_get_header (GMIME_OBJECT (message), "From")) {
+        if (ial = internet_address_list_parse_string (header)) {
+            if (internet_address_list_length (ial) == 1)
+                _mark_addresses_as (preupdate, metadata, ial, "nmo:from");
+            g_object_unref (ial);
         }
-
-        tracker_sparql_builder_predicate (metadata, "nmo:from");
-
-        tracker_sparql_builder_object_blank_open (metadata);
-        tracker_sparql_builder_predicate (metadata, "rdf:type");
-        tracker_sparql_builder_object (metadata, "nco:Contact");
-
-        if (fullname) {
-            tracker_sparql_builder_predicate (metadata, "nco:fullname");
-            tracker_sparql_builder_object_string (metadata, fullname);
-            g_free (fullname);
-        }
-
-        if (email_uri) {
-            tracker_sparql_builder_predicate (metadata, "nco:hasEmailAddress");
-            tracker_sparql_builder_object_iri (metadata, email_uri);
-            g_free (email_uri);
-        }
-
-        tracker_sparql_builder_object_blank_close (metadata);
     }
 
     if (message_id = g_mime_message_get_message_id (message)) {
@@ -154,144 +138,21 @@ extract_message_rfc822 (const gchar             *uri,
         tracker_sparql_builder_object_string (metadata, subject);
     }
 
-    ial = g_mime_message_get_recipients (message, GMIME_RECIPIENT_TYPE_TO);
-    if (ial) {
-        unsigned int i;
-
-        for (i = 0; i < internet_address_list_length (ial); i++) {
-            InternetAddress *ia = internet_address_list_get_address (ial, i);
-            const gchar *fullname = NULL, *email_address = NULL;
-            gchar *email_uri = NULL;
-
-            fullname = internet_address_get_name (ia);
-
-            if (INTERNET_ADDRESS_IS_MAILBOX (ia)) {
-                email_address = internet_address_mailbox_get_addr (INTERNET_ADDRESS_MAILBOX (ia));
-            }
-
-            if (email_address) {
-                email_uri = tracker_uri_printf_escaped ("mailto:%s", email_address);
-
-                tracker_sparql_builder_subject_iri (metadata, email_uri);
-                tracker_sparql_builder_predicate (metadata, "rdf:type");
-                tracker_sparql_builder_object (metadata, "nco:EmailAddress");
-
-                tracker_sparql_builder_subject_iri (metadata, email_uri);
-                tracker_sparql_builder_predicate (metadata, "nco:emailAddress");
-                tracker_sparql_builder_object_string (metadata, email_address);
-            }
-
-            tracker_sparql_builder_predicate (metadata, "nmo:primaryRecipient");
-
-            tracker_sparql_builder_object_blank_open (metadata);
-            tracker_sparql_builder_predicate (metadata, "rdf:typ");
-            tracker_sparql_builder_object (metadata, "nco:Contact");
-
-            if (fullname) {
-                tracker_sparql_builder_predicate (metadata, "nco:fullname");
-                tracker_sparql_builder_object_string (metadata, fullname);
-            }
-
-            if (email_uri) {
-                tracker_sparql_builder_predicate (metadata, "nco:hasEmailAddress");
-                tracker_sparql_builder_object_iri (metadata, email_uri);
-                g_free (email_uri);
-            }
-
-            tracker_sparql_builder_object_blank_close (metadata);
-        }
-
+    if (ial = g_mime_message_get_recipients (message, GMIME_RECIPIENT_TYPE_TO)) {
+        _mark_addresses_as (preupdate, metadata, ial, "nmo:primaryRecipient");
         g_object_unref (ial);
     }
 
-    header = g_mime_message_get_reply_to (message);
-    if (header) {
-        gchar *fullname = NULL, *email_address = NULL, *email_uri = NULL;
-
-        _parse_address (header, &fullname, &email_address);
-
-        if (email_address) {
-            email_uri = tracker_uri_printf_escaped ("mailto:%s", email_address);
-
-            tracker_sparql_builder_subject_iri (metadata, email_uri);
-            tracker_sparql_builder_predicate (metadata, "rdf:type");
-            tracker_sparql_builder_object (metadata, "nco:EmailAddress");
-
-            tracker_sparql_builder_subject_iri (metadata, email_uri);
-            tracker_sparql_builder_predicate (metadata, "nco:emailAddress");
-            tracker_sparql_builder_object_string (metadata, email_address);
-
-            g_free (email_address);
+    if (header = g_mime_message_get_reply_to (message)) {
+        if (ial = internet_address_list_parse_string (header)) {
+            if (internet_address_list_length (ial) == 1)
+                _mark_addresses_as (preupdate, metadata, ial, "nmo:replyTo");
+            g_object_unref (ial);
         }
-
-        tracker_sparql_builder_predicate (metadata, "nmo:replyTo");
-
-        tracker_sparql_builder_object_blank_open (metadata);
-        tracker_sparql_builder_predicate (metadata, "rdf:type");
-        tracker_sparql_builder_object (metadata, "nco:Contact");
-
-        if (fullname) {
-            tracker_sparql_builder_predicate (metadata, "nco:fullname");
-            tracker_sparql_builder_object_string (metadata, fullname);
-            g_free (fullname);
-        }
-
-        if (email_uri) {
-            tracker_sparql_builder_predicate (metadata, "nco:hasEmailAddress");
-            tracker_sparql_builder_object_iri (metadata, email_uri);
-            g_free (email_uri);
-        }
-
-        tracker_sparql_builder_object_blank_close (metadata);
     }
 
-    ial = g_mime_message_get_recipients (message, GMIME_RECIPIENT_TYPE_CC);
-    if (ial) {
-        unsigned int i;
-
-        for (i = 0; i < internet_address_list_length (ial); i++) {
-            InternetAddress *ia = internet_address_list_get_address (ial, i);
-            const gchar *fullname = NULL, *email_address = NULL;
-            gchar *email_uri = NULL;
-
-            fullname = internet_address_get_name (ia);
-
-            if (INTERNET_ADDRESS_IS_MAILBOX (ia)) {
-                email_address = internet_address_mailbox_get_addr (INTERNET_ADDRESS_MAILBOX (ia));
-            }
-
-            if (email_address) {
-                email_uri = tracker_uri_printf_escaped ("mailto:%s", email_address);
-
-                tracker_sparql_builder_subject_iri (metadata, email_uri);
-                tracker_sparql_builder_predicate (metadata, "rdf:type");
-                tracker_sparql_builder_object (metadata, "nco:EmailAddress");
-
-                tracker_sparql_builder_subject_iri (metadata, email_uri);
-                tracker_sparql_builder_predicate (metadata, "nco:emailAddress");
-                tracker_sparql_builder_object_string (metadata, email_address);
-            }
-
-            tracker_sparql_builder_predicate (metadata, "nmo:secondaryRecipient");
-
-            tracker_sparql_builder_object_blank_open (metadata);
-            tracker_sparql_builder_predicate (metadata, "rdf:typ");
-            tracker_sparql_builder_object (metadata, "nco:Contact");
-
-            if (fullname) {
-                tracker_sparql_builder_predicate (metadata, "nco:fullname");
-                tracker_sparql_builder_object_string (metadata, fullname);
-            }
-
-            if (email_uri) {
-                tracker_sparql_builder_predicate (metadata, "nco:hasEmailAddress");
-                tracker_sparql_builder_object_iri (metadata, email_uri);
-                g_free (email_uri);
-            }
-
-            tracker_sparql_builder_object_blank_close (metadata);
-        }
-
+    if (ial = g_mime_message_get_recipients (message, GMIME_RECIPIENT_TYPE_CC)) {
+        _mark_addresses_as (preupdate, metadata, ial, "nmo:secondaryRecipient");
         g_object_unref (ial);
     }
 
