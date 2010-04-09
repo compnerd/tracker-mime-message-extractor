@@ -144,14 +144,12 @@ extract_message_rfc822 (const gchar             *uri,
         tracker_sparql_builder_object_blank_close (metadata);
     }
 
-    message_id = g_mime_message_get_message_id (message);
-    if (message_id) {
+    if (message_id = g_mime_message_get_message_id (message)) {
         tracker_sparql_builder_predicate (metadata, "nmo:messageId");
         tracker_sparql_builder_object_string (metadata, message_id);
     }
 
-    subject = g_mime_message_get_subject (message);
-    if (subject) {
+    if (subject = g_mime_message_get_subject (message)) {
         tracker_sparql_builder_predicate (metadata, "nmo:messageSubject");
         tracker_sparql_builder_object_string (metadata, subject);
     }
@@ -297,17 +295,13 @@ extract_message_rfc822 (const gchar             *uri,
         g_object_unref (ial);
     }
 
-    date = g_mime_message_get_date_as_string (message);
-    if (date) {
-        gchar *parsed;
-
-        parsed = tracker_date_guess (date);
-        if (parsed) {
+    if (date = g_mime_message_get_date_as_string (message)) {
+        gchar *sent_date;
+        if (sent_date = tracker_date_guess (date)) {
             tracker_sparql_builder_predicate (metadata, "nmo:sentDate");
-            tracker_sparql_builder_object_string (metadata, parsed);
-            g_free (parsed);
+            tracker_sparql_builder_object_string (metadata, sent_date);
+            g_free (sent_date);
         }
-
         g_free (date);
     }
 
